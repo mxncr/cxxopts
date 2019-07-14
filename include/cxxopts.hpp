@@ -1339,6 +1339,9 @@ namespace cxxopts
     std::string
     help(const std::vector<std::string>& groups = {}) const;
 
+    std::string
+    structured(const std::vector<std::string>& groups = {}) const;
+
     const std::vector<std::string>
     groups() const;
 
@@ -1357,6 +1360,9 @@ namespace cxxopts
     String
     help_one_group(const std::string& group) const;
 
+    String
+    structured_one_group(const std::string& group) const;
+
     void
     generate_group_help
     (
@@ -1366,6 +1372,16 @@ namespace cxxopts
 
     void
     generate_all_groups_help(String& result) const;
+
+    void
+    generate_group_structured
+    (
+      String& result,
+      const std::vector<std::string>& groups
+    ) const;
+
+    void
+    generate_all_groups_structured(String& result) const;
 
     std::string m_program;
     String m_help_string;
@@ -1461,6 +1477,57 @@ namespace cxxopts
     }
 
     String
+    format_option_structured
+    (
+      const HelpOptionDetails& o
+    )
+    {
+      auto& s = o.s;
+      auto& l = o.l;
+
+      String result = "OPTION|";
+
+      if (s.size() > 0)
+      {
+        result += "" + toLocalString(s);
+      }
+      else
+      {
+        result += " ";
+      }
+
+      result += "|";
+
+      if (l.size() > 0)
+      {
+        result += "" + toLocalString(l);
+      }
+
+      result += "|";
+
+      auto arg = o.arg_help.size() > 0 ? toLocalString(o.arg_help) : "arg";
+
+      if (!o.is_boolean)
+      {
+        if (o.has_implicit)
+        {
+          result += "[=" + arg + "(=" + toLocalString(o.implicit_value) + ")]";
+        }
+        else
+        {
+          result += "" + arg;
+        }
+      } else {
+          result += "boolean";
+      }
+      result += "|";
+      result += o.default_value;
+      result += "|";
+
+      return result;
+    }
+
+    String
     format_description
     (
       const HelpOptionDetails& o,
@@ -1527,6 +1594,21 @@ namespace cxxopts
 
       return result;
     }
+
+    String
+    format_description_structured
+    (
+      const HelpOptionDetails& o
+    )
+    {
+      auto desc = o.desc;
+
+      String result;
+      result += desc;
+
+      return result;
+    }
+
   }
 
 inline
@@ -2073,6 +2155,55 @@ Options::help_one_group(const std::string& g) const
 }
 
 inline
+String
+Options::structured_one_group(const std::string& g) const
+{
+  typedef std::vector<std::pair<String, String>> OptionHelp;
+
+  auto group = m_help.find(g);
+  if (group == m_help.end())
+  {
+    return "";
+  }
+
+  OptionHelp format;
+
+  String result;
+
+  for (const auto& o : group->second.options)
+  {
+    if (m_positional_set.find(o.l) != m_positional_set.end() &&
+        !m_show_positional)
+    {
+      continue;
+    }
+
+    auto s = format_option_structured(o);
+    format.push_back(std::make_pair(s, String()));
+  }
+
+  auto fiter = format.begin();
+  for (const auto& o : group->second.options)
+  {
+    if (m_positional_set.find(o.l) != m_positional_set.end() &&
+        !m_show_positional)
+    {
+      continue;
+    }
+
+    auto d = format_description_structured(o);
+
+    result += fiter->first;
+    result += d;
+    result += '\n';
+
+    ++fiter;
+  }
+
+  return result;
+}
+
+inline
 void
 Options::generate_group_help
 (
@@ -2111,6 +2242,44 @@ Options::generate_all_groups_help(String& result) const
 }
 
 inline
+void
+Options::generate_group_structured
+(
+  String& result,
+  const std::vector<std::string>& print_groups
+) const
+{
+  for (size_t i = 0; i != print_groups.size(); ++i)
+  {
+    const String& group_help_text = structured_one_group(print_groups[i]);
+    if (empty(group_help_text))
+    {
+      continue;
+    }
+    result += group_help_text;
+    if (i < print_groups.size() - 1)
+    {
+      result += '\n';
+    }
+  }
+}
+
+inline
+void
+Options::generate_all_groups_structured(String& result) const
+{
+  std::vector<std::string> all_groups;
+  all_groups.reserve(m_help.size());
+
+  for (auto& group : m_help)
+  {
+    all_groups.push_back(group.first);
+  }
+
+  generate_group_structured(result, all_groups);
+}
+
+inline
 std::string
 Options::help(const std::vector<std::string>& help_groups) const
 {
@@ -2130,6 +2299,26 @@ Options::help(const std::vector<std::string>& help_groups) const
   else
   {
     generate_group_help(result, help_groups);
+  }
+
+  return toUTF8String(result);
+}
+
+inline
+std::string
+Options::structured(const std::vector<std::string>& help_groups) const
+{
+  String result = "PROGRAM|";
+  result += toLocalString(m_program);
+  result += '\n';
+
+  if (help_groups.size() == 0)
+  {
+    generate_all_groups_structured(result);
+  }
+  else
+  {
+    generate_group_structured(result, help_groups);
   }
 
   return toUTF8String(result);
